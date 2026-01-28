@@ -1,0 +1,23 @@
+# Data
+data/
+datasets/
+
+# YOLO outputs
+runs/
+
+# Model weights
+*.pt
+*.pth
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
