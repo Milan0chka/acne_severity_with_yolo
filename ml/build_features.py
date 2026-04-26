@@ -1,9 +1,11 @@
+import argparse
+import yaml
 from ultralytics import YOLO
 import cv2
 import pandas as pd
 from pathlib import Path
 
-def compute_features(model, img_path, conf_thres=0.25, iou_thres=0.7):
+def compute_features(model, img_path, conf_thres=0.2, iou_thres=0.7):
     # Read image to get dimensions
     img = cv2.imread(str(img_path))
     if img is None:
@@ -32,16 +34,70 @@ def compute_features(model, img_path, conf_thres=0.25, iou_thres=0.7):
 
     return density, avg_conf, int(len(confs))
 
-def main():
-    model_path = "../runs/detect/train4/weights/best.pt"
-    model = YOLO(model_path)
+def get_model_name(run_dir: Path) -> str:
+    args_yaml = run_dir / "args.yaml"
+    if not args_yaml.exists():
+        raise FileNotFoundError(f"Missing args.yaml in: {run_dir}")
 
-    images_dir = Path("../data/raw")
-    out_csv = Path("../data/features/features2.csv")
+    with open(args_yaml, "r") as f:
+        meta = yaml.safe_load(f)
+
+    model_value = meta.get("model", "model")
+    return Path(str(model_value)).stem  # removes .pt
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Extract YOLO features")
+
+    parser.add_argument(
+        "--run",
+        type=str,
+        default="train15",
+        help="Run folder inside ../runs/detect/"
+    )
+
+    parser.add_argument(
+        "--images",
+        type=str,
+        default="../data/raw",
+        help="Directory with input images"
+    )
+
+    parser.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help="Custom output name (without .csv). If omitted → auto features_{model}_{run}"
+    )
+
+    args = parser.parse_args()
+
+    run_dir = Path(f"../runs/detect/{args.run}")
+    model_name = get_model_name(run_dir)
+
+    model_path = run_dir / "weights" / "best.pt"
+    images_dir = Path(args.images)
+
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model not found: {model_path}")
+
+    out_name = args.out if args.out else f"features_{model_name}_{args.run}"
+    out_csv = Path(f"../data/features/{out_name}.csv")
     out_csv.parent.mkdir(parents=True, exist_ok=True)
 
+    print(f"\nRun: {args.run}")
+    print(f"Model: {model_name}")
+    print(f"Output CSV: {out_csv}\n")
+
+    model = YOLO(model_path)
+
     rows = []
-    for img_path in sorted(list(images_dir.glob("*.jpg")) + list(images_dir.glob("*.png"))):
+    image_files = sorted(
+        list(images_dir.glob("*.jpg")) +
+        list(images_dir.glob("*.png"))
+    )
+
+    for img_path in image_files:
         density, avg_conf, n = compute_features(model, img_path)
         rows.append({
             "image": img_path.name,
@@ -52,7 +108,9 @@ def main():
 
     df = pd.DataFrame(rows)
     df.to_csv(out_csv, index=False)
+
     print(f"Saved: {out_csv} ({len(df)} rows)")
+
 
 if __name__ == "__main__":
     main()
